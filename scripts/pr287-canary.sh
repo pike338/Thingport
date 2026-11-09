@@ -38,6 +38,15 @@ FREE="$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')"
 MEM="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
 (( FREE >= 6*1024*1024 )) || { echo "Less than 6 GiB free in Docker root; aborting" >&2; exit 1; }
 (( MEM >= 2*1024*1024 )) || { echo "Less than 2 GiB available memory; aborting" >&2; exit 1; }
+# In LXC, MemAvailable may reflect host RAM rather than the cgroup limit.
+if [[ -r /sys/fs/cgroup/memory.max && -r /sys/fs/cgroup/memory.current ]]; then
+  LIMIT="$(cat /sys/fs/cgroup/memory.max)"
+  USED="$(cat /sys/fs/cgroup/memory.current)"
+  if [[ "$LIMIT" != max ]] && (( LIMIT - USED < 2*1024*1024*1024 )); then
+    echo "Less than 2 GiB free under the LXC memory limit; aborting" >&2
+    exit 1
+  fi
+fi
 [[ ! -e "$WORKDIR/source" ]] || { echo "Existing source directory; refusing overwrite" >&2; exit 1; }
 mkdir -p "$WORKDIR"
 
